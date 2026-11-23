@@ -14,6 +14,9 @@ bin/*
 !bin/*-linux-amd64
 !bin/lib/
 !bin/lib/**
+go/utils/bin_cache/*
+!go/utils/bin_cache/.gitkeep
+!go/utils/bin_cache/*-linux-amd64
 data/*
 !data/.gitkeep
 .DS_Store

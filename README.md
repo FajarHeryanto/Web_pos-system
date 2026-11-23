@@ -8,7 +8,7 @@ Aplikasi Point of Sales berbasis web yang menghubungkan frontend HTML/Bootstrap,
 - Dashboard: pendapatan, jumlah transaksi/produk, stok menipis, grafik 7 hari, produk terlaris, transaksi terbaru.
 - Katalog produk: cari/filter, tambah, ubah dan hapus (admin); indikator ketersediaan stok.
 - POS: keranjang banyak produk, kuantitas, diskon persentase, Cash/Debit/Credit, transaksi database atomik, pengurangan stok, riwayat, dan cetak struk.
-- Laporan: proses ekspor CSV dan kalkulasi melalui C, lalu laporan kategori/harian/Top 10 melalui COBOL.
+- Laporan: proses ekspor CSV dan kalkulasi melalui C, lalu laporan kategori/harian/Top 10 melalui COBOL atau generator Go cadangan di Vercel.
 - Skema PostgreSQL dibuat otomatis saat API tersambung; `supabase/schema.sql` tersedia untuk referensi/manual setup.
 
 ## Struktur proyek
@@ -17,12 +17,13 @@ Aplikasi Point of Sales berbasis web yang menghubungkan frontend HTML/Bootstrap,
 pos-system/
 ├── api/index.go              # Vercel Serverless Function
 ├── go/                       # main.go, router, handlers, models, middleware, database, utils
+│   └── utils/bin_cache/      # Binary Linux amd64 yang di-embed ke fungsi Go
 ├── go.mod                    # Modul di root agar builder Vercel menemukannya
 ├── c/processor.c             # C Engine
 ├── cobol/reporter.cob        # GnuCOBOL Reporter
 ├── web/                      # HTML, CSS, JS
 ├── supabase/schema.sql
-├── bin/                       # Binary engine hasil build (tidak masuk Git secara default)
+├── bin/                       # Binary Linux hasil build dan library runtime opsional
 ├── data/                      # CSV/laporan lokal
 ├── Makefile
 └── vercel.json
@@ -154,7 +155,7 @@ Endpoint selain login memerlukan header `Authorization: Bearer <JWT>`.
 | POST | `/api/transactions` | Login | Satu/multi-item; simpan dan kurangi stok atomik |
 | DELETE | `/api/transactions/:id` | Admin | Hapus transaksi dan kembalikan stok atomik |
 | POST | `/api/process` | Admin | Ekspor Supabase, jalankan C Engine |
-| POST | `/api/reports/generate` | Admin | Jalankan COBOL Reporter |
+| POST | `/api/reports/generate` | Admin | Buat laporan dengan COBOL atau fallback Go di Vercel |
 | GET | `/api/reports/income` | Login | Isi laporan teks tersimpan |
 | GET | `/api/dashboard` | Login | KPI, grafik, Top 5, aktivitas terbaru |
 
@@ -185,32 +186,35 @@ Backend menggunakan row lock saat checkout. Bila stok untuk satu item tidak cuku
    - `JWT_SECRET`: rahasia acak minimal 32 karakter.
    - Opsional `POS_CORS_ORIGINS`: origin frontend yang diizinkan, jika API dipisah host.
 3. Deploy. `vercel.json` mengarahkan `/api/*` dan `/health` ke `api/index.go`, sedangkan halaman dan aset dilayani dari `web/`.
-4. Buka URL deployment. Vercel mengompilasi fungsi Go; `make vercel-build` mencoba membangun engine C dan COBOL bila compiler tersedia di builder.
+4. Buka URL deployment. Vercel mengompilasi fungsi Go; binary Linux amd64 yang sudah di-embed ikut masuk ke fungsi. `make vercel-build` tetap mencoba membangun engine C/COBOL bila compiler tersedia di builder.
 
-Go memakai modul di root dan koneksi `pgx` tanpa CGO. Fungsi serverless tetap tunduk pada batas waktu/deployment Vercel. File `/tmp` dan laporan tidak persisten antar cold start.
+Go memakai modul di root dan koneksi `pgx` tanpa CGO. Fungsi serverless tetap tunduk pada batas waktu/deployment Vercel. File `/tmp` tidak persisten antar instance: saat laporan dibaca dari instance lain, API akan mengekspor transaksi ulang, menjalankan C Engine, lalu membuat ulang laporan.
 
 ### C / COBOL di Vercel: binary tersedia atau hybrid
 
-GnuCOBOL umumnya tidak terpasang di builder/runtime serverless. Opsi:
+GnuCOBOL umumnya tidak terpasang di runtime serverless. C Processor perlu disiapkan agar alur laporan dapat memproses transaksi; bila COBOL Reporter tidak dapat berjalan, generator Go mengambil alih pembuatan laporan.
 
-**A. Bundel binary Linux statis**
+**A. Binary Linux yang di-embed (pilihan utama untuk Vercel)**
 
-Workflow `.github/workflows/build-linux-bin.yml` membangun kedua binary di GitHub Actions saat perubahan masuk ke `c/**` atau `cobol/**`, dan juga dapat dijalankan manual dari tab **Actions**. Workflow menguji executable, lalu meng-commit dan push `bin/processor-linux-amd64` serta `bin/reporter-linux-amd64` (beserta `bin/lib/` jika linking dinamis diperlukan). Pastikan pengaturan repository mengizinkan workflow menulis ke repository (`contents: write`).
+Workflow `.github/workflows/build-linux-bin.yml` membangun engine Linux amd64 saat ada perubahan pada `c/**` atau `cobol/**`; workflow juga dapat dijalankan manual dari tab **Actions**. Selain menguji kedua engine, workflow menyalin binary ke `go/utils/bin_cache/`, menjalankan pemeriksaan Go (`go build`, `go vet`, serta uji format laporan), lalu meng-commit binary, pustaka runtime yang diperlukan, cache embed, dan `go.sum`. Pastikan repository mengizinkan workflow menulis ke repository (`contents: write`).
 
-Untuk build manual pada Linux x86_64, gunakan `make c-static` dan `make cobol-static`. Hasil harus bernama `bin/processor-linux-amd64` dan `bin/reporter-linux-amd64`. `.gitignore` mengecualikan binary lokal/Windows tetapi mempertahankan artifact Linux. Jika GnuCOBOL tidak dapat di-link statis, workflow membundel library runtime non-glibc ke `bin/lib/`; API menetapkan `LD_LIBRARY_PATH` saat menjalankan reporter. `vercel.json` menyertakan `bin/**` ke fungsi Go. `FindBinary` memprioritaskan binary Linux amd64 di Vercel, menyalinnya ke `/tmp`, dan memberi izin eksekusi.
+**Penting untuk paket ini:** berkas di `go/utils/bin_cache/` dalam ZIP awal adalah penanda, bukan executable. Jalankan workflow GitHub Actions sebelum deployment pertama, lalu pastikan commit hasil workflow sudah masuk ke branch yang dipakai Vercel. Alternatifnya, salin executable Linux asli yang valid ke `go/utils/bin_cache/processor-linux-amd64` dan `go/utils/bin_cache/reporter-linux-amd64`, lalu commit keduanya. Jangan menyalin binary Windows atau file teks.
 
-Setelah workflow berhasil dan binary muncul sebagai commit, biarkan integrasi Git Vercel membuat deployment baru (atau lakukan redeploy manual). Untuk pertama kali, jalankan workflow manual setelah file workflow masuk ke repository.
+Saat aplikasi berjalan di Vercel Linux amd64, fungsi Go mengambil binary yang di-embed, mengekstraknya secara atomik ke `/tmp` dengan izin eksekusi, lalu menjalankannya. Jika COBOL Reporter atau pustaka `libcob` tidak tersedia saat runtime, laporan dibuat oleh generator Go dengan susunan kolom dan bagian yang sama. Saat hasil sementara tidak ada di instance yang menerima permintaan berikutnya, API membuat ulang CSV dari Supabase dan menjalankan C Engine lagi. Jika GnuCOBOL membutuhkan pustaka dinamis, workflow menyertakan pustaka non-glibc ke `bin/lib/` dan API menambahkan folder itu ke `LD_LIBRARY_PATH`.
 
-**B. Mode hybrid (disarankan bila `cobc`/pustaka statis tidak tersedia)**
+Setelah workflow selesai, pastikan commit baru ter-deploy di Vercel (otomatis melalui integrasi Git, atau lakukan redeploy manual). Workflow menjalankan `go mod tidy` untuk menyelaraskan `go.mod` dan menghasilkan `go.sum`; bila mengembangkan lokal, jalankan perintah yang sama dengan Go 1.22+ untuk menyegarkan dependensi.
 
-Tempatkan API Go bersama C/COBOL pada VM/container Linux yang Anda kelola, dengan `DATABASE_URL`, `JWT_SECRET`, GCC, dan GnuCOBOL terpasang. Frontend dapat tetap dideploy di Vercel:
+**B. Mode hybrid**
+
+Jika Anda ingin menjalankan COBOL asli pada host yang dikelola sendiri, tempatkan API Go bersama C/COBOL pada VM/container Linux dengan `DATABASE_URL`, `JWT_SECRET`, GCC, dan GnuCOBOL terpasang. Frontend dapat tetap dideploy di Vercel:
 
 1. Ubah `window.POS_API_BASE` pada `web/js/config.js` menjadi origin API Go, misalnya `https://pos-api.example.com` (tanpa garis miring di akhir).
 2. Set `POS_CORS_ORIGINS` pada backend menjadi origin frontend Vercel persis, misalnya `https://nama-proyek.vercel.app`.
 3. Deploy frontend dan jalankan `go run ./go` atau binary Go hasil `make go` pada host backend dengan folder `bin/processor` dan `bin/reporter` tersedia.
 4. Database tetap Supabase. Backend hybrid menyimpan file kerja di `data/` lokal; atur volume persistent bila ingin mempertahankan laporan, atau ekspor laporan sebelum restart.
 
-Pada mode Vercel bila binary engine tidak disertakan, aplikasi utama tetap dapat dibuka dan API transaksi tetap berfungsi, tetapi tombol pemrosesan yang membutuhkan binary tersebut mengembalikan pesan bahwa engine belum tersedia.
+
+Pada mode Vercel, jika binary C Processor belum disertakan, pemrosesan transaksi untuk laporan akan mengembalikan pesan bahwa C Engine belum tersedia. Jika hanya COBOL Reporter yang gagal, generator Go tetap dapat membuat laporan.
 
 ## Keamanan dan batas operasional
 
@@ -223,4 +227,4 @@ Pada mode Vercel bila binary engine tidak disertakan, aplikasi utama tetap dapat
 
 ## Status verifikasi pada paket ini
 
-C Engine memvalidasi CSV, menghitung subtotal/diskon/net, mengurutkan tanggal, dan menangani memori dinamis; skenario sukses, input rusak, tanggal/metode bayar tidak valid, dan 50.000 record telah diuji dengan GCC serta sanitizer melalui harness lokal. Lingkungan pembuatan paket ini tidak menyediakan Go compiler, `cobc`, maupun header pengembangan C standar, sehingga `make build` penuh dan kompilasi Go/COBOL belum dapat diverifikasi di sini. Jalankan `make build` pada mesin pengembangan yang memenuhi kebutuhan di atas, lalu uji login/koneksi Supabase sebelum penggunaan.
+C Engine sebelumnya telah diuji pada skenario sukses, input rusak, tanggal/metode bayar tidak valid, dan 50.000 record dengan GCC serta sanitizer melalui harness lokal. Lingkungan pembuatan paket ini tidak menyediakan Go compiler, `gofmt`, maupun `cobc`, sehingga `go build`, `go vet`, uji pembandingan fallback Go dengan COBOL, dan build penuh belum dapat dijalankan di sini. Workflow GitHub Actions menjalankan pemeriksaan tersebut setelah binary Linux asli dibuat; tinjau hasil workflow sebelum deploy. Uji login dan koneksi Supabase sebelum penggunaan.

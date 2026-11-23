@@ -112,6 +112,28 @@ jobs:
           chmod +x bin/reporter-linux-amd64
           find bin/lib -type f -exec chmod 755 {} +
 
+      - name: Copy Linux binaries for Go embedding
+        run: |
+          mkdir -p go/utils/bin_cache
+          cp bin/processor-linux-amd64 go/utils/bin_cache/processor-linux-amd64
+          cp bin/reporter-linux-amd64 go/utils/bin_cache/reporter-linux-amd64
+          chmod +x go/utils/bin_cache/processor-linux-amd64 go/utils/bin_cache/reporter-linux-amd64
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify Go build and vet
+        run: |
+          go mod tidy
+          go build ./go/...
+          go vet ./...
+          COBOL_REPORTER_TEST_BIN="$PWD/bin/reporter-linux-amd64" \
+          LD_LIBRARY_PATH="$PWD/bin/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+            go test ./...
+
       - name: Smoke test both engines
         shell: bash
         run: |
@@ -137,6 +159,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f bin/processor-linux-amd64 bin/reporter-linux-amd64
+          git add -f go/utils/bin_cache/processor-linux-amd64 go/utils/bin_cache/reporter-linux-amd64
+          git add go.mod
+          if [ -f go.sum ]; then git add go.sum; fi
           if find bin/lib -type f -print -quit | grep -q .; then
             git add -f bin/lib
           fi

@@ -65,7 +65,7 @@
     try {
       await POSApi.request('/reports/generate', { method: 'POST' });
       await loadReport();
-      POSApi.showAlert('#report-alert', 'Laporan COBOL berhasil dibuat.', 'success');
+      POSApi.showAlert('#report-alert', 'Laporan berhasil dibuat.', 'success');
     } catch (error) {
       setStep(2, 'failed', 'Pembuatan laporan gagal');
       POSApi.showAlert('#report-alert', POSApi.formatError(error));

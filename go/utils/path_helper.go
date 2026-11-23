@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -23,13 +24,13 @@ func dirExists(path string) bool {
 	return err == nil && info.IsDir()
 }
 
-// ProjectRoot mencari folder akar proyek (yang memuat bin / web / go.mod).
+// ProjectRoot mencari folder akar proyek (yang memuat go.mod / web / bin).
 // Bisa dipaksa lewat environment variable POS_ROOT.
 func ProjectRoot() string {
 	if root := os.Getenv("POS_ROOT"); root != "" {
 		return root
 	}
-	candidates := []string{"/var/task"}
+	candidates := []string{}
 	if wd, err := os.Getwd(); err == nil {
 		candidates = append(candidates, wd, filepath.Dir(wd), filepath.Dir(filepath.Dir(wd)))
 	}
@@ -38,12 +39,12 @@ func ProjectRoot() string {
 		candidates = append(candidates, dir, filepath.Dir(dir))
 	}
 	for _, dir := range candidates {
-		if dirExists(filepath.Join(dir, "bin")) || dirExists(filepath.Join(dir, "web")) || fileExists(filepath.Join(dir, "go.mod")) {
+		if fileExists(filepath.Join(dir, "go.mod")) || dirExists(filepath.Join(dir, "web")) {
 			return dir
 		}
 	}
-	if len(candidates) > 1 {
-		return candidates[1]
+	if len(candidates) > 0 {
+		return candidates[0]
 	}
 	return "."
 }
@@ -92,6 +93,50 @@ func BinaryName(base string) string {
 // ErrBinaryNotFound dikembalikan bila binary C/COBOL belum dikompilasi.
 var ErrBinaryNotFound = errors.New("binary tidak ditemukan")
 
+// isLinuxAMD64ELF rejects empty sentinels, non-Linux files, and binaries
+// built for a different ELF class, byte order, or machine architecture.
+func isLinuxAMD64ELF(data []byte) bool {
+	return len(data) >= 20 &&
+		bytes.Equal(data[:4], []byte{0x7f, 'E', 'L', 'F'}) &&
+		data[4] == 2 && data[5] == 1 && data[18] == 0x3e && data[19] == 0
+}
+
+// writeEmbeddedBinaryAtomically extracts an embedded Linux executable into
+// /tmp, sets mode 0755, and atomically replaces the stable runtime path.
+func writeEmbeddedBinaryAtomically(data []byte, base string) (string, error) {
+	if !isLinuxAMD64ELF(data) {
+		return "", ErrBinaryNotFound
+	}
+	target := filepath.Join("/tmp", "pos-"+base)
+	temp, err := os.CreateTemp("/tmp", "pos-"+base+"-")
+	if err != nil {
+		return "", err
+	}
+	tempPath := temp.Name()
+	defer os.Remove(tempPath)
+	if _, err := io.Copy(temp, bytes.NewReader(data)); err != nil {
+		temp.Close()
+		return "", err
+	}
+	if err := temp.Close(); err != nil {
+		return "", err
+	}
+	if err := os.Chmod(tempPath, 0o755); err != nil {
+		return "", err
+	}
+	if err := os.Rename(tempPath, target); err != nil {
+		return "", err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return "", err
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		return "", errors.New("binary embedded tidak memiliki izin eksekusi")
+	}
+	return target, nil
+}
+
 // FindBinary mencari binary engine ("processor" atau "reporter").
 // Urutan: env override (envVar); di Vercel, binary Linux amd64 lebih dulu;
 // lalu bin/ dan folder sumber (c/ atau cobol/). Di lokal, binary native lebih dulu.
@@ -101,18 +146,18 @@ func FindBinary(base, envVar, sourceDir string) (string, error) {
 	name := BinaryName(base)
 
 	candidates := []string{}
-	if override := os.Getenv(envVar); override != "" {
+	override := os.Getenv(envVar)
+	if override != "" && (!IsVercel() || fileExists(override)) {
 		candidates = append(candidates, override)
 	}
-	// Di Vercel utamakan binary Linux yang dibundel oleh GitHub Actions,
-	// bukan binary lokal/dinamis yang mungkin kebetulan ikut dalam build.
 	if IsVercel() && runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
-		candidates = append(candidates,
-			filepath.Join(root, "bin", base+"-linux-amd64"),
-			filepath.Join("/var/task", "bin", base+"-linux-amd64"),
-			filepath.Join("bin", base+"-linux-amd64"),
-			filepath.Join("..", "bin", base+"-linux-amd64"),
-		)
+		if (override == "" || !fileExists(override)) {
+			if embedded := embeddedLinuxBinary(base); isLinuxAMD64ELF(embedded) {
+				return writeEmbeddedBinaryAtomically(embedded, base)
+			}
+		}
+		// Cache belum terisi/valid? Coba artifact yang ikut dibundel di bin/.
+		candidates = append(candidates, filepath.Join(root, "bin", base+"-linux-amd64"))
 	}
 	candidates = append(candidates,
 		filepath.Join(root, "bin", name),

@@ -35,9 +35,9 @@ go:
 run:
 	$(GO) run ./go
 
-# Vercel dapat membangun C Engine bila gcc tersedia. COBOL opsional: tanpa
-# binary COBOL terbundel, API tetap berjalan, tetapi tombol Generate COBOL
-# meminta backend COBOL hybrid. Lihat README untuk penyiapan.
+# Vercel dapat membangun engine bila compiler tersedia. Pada deployment
+# serverless, binary Linux amd64 di-embed dari go/utils/bin_cache; jika reporter
+# COBOL gagal saat runtime, API memakai generator laporan Go.
 vercel-build:
 	mkdir -p bin
 	@if command -v $(CC) >/dev/null 2>&1; then $(MAKE) -C c CC=$(CC); else echo "gcc tidak tersedia; lewati C Engine. Sertakan binary di bin/ untuk mengaktifkannya."; fi
