@@ -1,15 +1,17 @@
 package handlers
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"pos-system/go/database"
 	"pos-system/go/models"
 	"pos-system/go/utils"
+
+	"github.com/gin-gonic/gin"
 )
 
 const productSelect = `SELECT product_id, name, category, price::float8, stock, created_at FROM products`
@@ -178,4 +180,3 @@ func DeleteProduct(c *gin.Context) {
 	}
 	utils.Success(c, http.StatusOK, "Produk berhasil dihapus", gin.H{"product_id": id})
 }
-
