@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -40,6 +42,16 @@ func GenerateReport(c *gin.Context) {
 	cmd.Dir = utils.ProjectRoot()
 	cmd.Env = setEnvironment(os.Environ(), "INPUT_CSV_PATH", inputPath)
 	cmd.Env = setEnvironment(cmd.Env, "OUTPUT_REPORT_PATH", tempOutputPath)
+	if runtime.GOOS == "linux" {
+		libDir := filepath.Join(utils.ProjectRoot(), "bin", "lib")
+		if info, statErr := os.Stat(libDir); statErr == nil && info.IsDir() {
+			libraryPath := libDir
+			if inherited := os.Getenv("LD_LIBRARY_PATH"); inherited != "" {
+				libraryPath += string(os.PathListSeparator) + inherited
+			}
+			cmd.Env = setEnvironment(cmd.Env, "LD_LIBRARY_PATH", libraryPath)
+		}
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {

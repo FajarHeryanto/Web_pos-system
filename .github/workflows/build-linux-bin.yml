@@ -1,0 +1,148 @@
+name: Build Linux POS engines
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "c/**"
+      - "cobol/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: linux-pos-engines-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install compilers and libraries
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc libgmp-dev libdb-dev libncurses-dev
+          if apt-cache show gnucobol >/dev/null 2>&1 && apt-cache show libcob-dev >/dev/null 2>&1; then
+            sudo apt-get install -y --no-install-recommends gnucobol libcob-dev
+          else
+            sudo apt-get install -y --no-install-recommends gnucobol3 libcob4-dev
+          fi
+
+      - name: Build static C Engine
+        run: |
+          mkdir -p bin
+          gcc -std=c99 -O2 -static -o bin/processor-linux-amd64 c/processor.c -lm
+          chmod +x bin/processor-linux-amd64
+
+      - name: Build COBOL Reporter
+        shell: bash
+        run: |
+          rm -rf bin/lib
+          mkdir -p bin/lib
+          static_linked=false
+          if cobc -x -free -O2 -static -o bin/reporter-linux-amd64 cobol/reporter.cob; then
+            ldd_output="$(ldd bin/reporter-linux-amd64 2>&1 || true)"
+            if grep -Fq "not a dynamic executable" <<< "$ldd_output"; then
+              static_linked=true
+            fi
+          fi
+          if [ "$static_linked" = true ]; then
+            echo "COBOL Reporter berhasil di-link statis."
+          else
+            echo "Link statis GnuCOBOL tidak tersedia; menyiapkan binary dinamis dan library runtime."
+            rm -f bin/reporter-linux-amd64
+            cobc -x -free -O2 -o bin/reporter-linux-amd64 cobol/reporter.cob
+            python3 - <<'PY'
+          import os
+          import re
+          import shutil
+          import subprocess
+
+          binary = os.path.abspath("bin/reporter-linux-amd64")
+          libdir = os.path.abspath("bin/lib")
+          os.makedirs(libdir, exist_ok=True)
+
+          # Bundle GnuCOBOL and non-glibc dependencies recursively.
+          core_prefixes = (
+              "libc.so", "libm.so", "libdl.so", "libpthread.so", "librt.so",
+              "libresolv.so", "libutil.so", "libanl.so", "libnss_",
+              "ld-linux", "linux-vdso",
+          )
+          queue = [binary]
+          copied = set()
+          while queue:
+              current = queue.pop()
+              result = subprocess.run(["ldd", current], text=True,
+                                      stdout=subprocess.PIPE,
+                                      stderr=subprocess.STDOUT, check=False)
+              for line in result.stdout.splitlines():
+                  if "not found" in line:
+                      raise SystemExit("Unresolved runtime library: " + line)
+                  match = re.search(r'=>\s+(/[^\s]+)', line)
+                  if not match:
+                      match = re.match(r'\s*(/[^\s]+)\s+\(', line)
+                  if not match:
+                      continue
+                  resolved = os.path.realpath(match.group(1))
+                  # Keep the loader's SONAME (for example libcob.so.4),
+                  # even when the resolved file has a longer version suffix.
+                  name = os.path.basename(match.group(1))
+                  if name.startswith(core_prefixes) or name in copied:
+                      continue
+                  destination = os.path.join(libdir, name)
+                  shutil.copy2(resolved, destination)
+                  os.chmod(destination, 0o755)
+                  copied.add(name)
+                  queue.append(destination)
+
+          print("Bundled runtime libraries:")
+          for name in sorted(copied):
+              print(" -", name)
+          if not copied:
+              raise SystemExit("No dynamic libraries were bundled")
+          PY
+          fi
+          chmod +x bin/reporter-linux-amd64
+          find bin/lib -type f -exec chmod 755 {} +
+
+      - name: Smoke test both engines
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          cat > "$work/transactions.csv" <<'CSV'
+          transaction_id,product_id,product_name,category,quantity,unit_price,discount_percent,payment_method,transaction_date,cashier_name
+          T001,P001,Nasi Goreng,Makanan,2,25000.00,10.00,Cash,2026-11-01,Andi Pratama
+          CSV
+          bin/processor-linux-amd64 "$work/transactions.csv" "$work/processed_data.csv"
+          LD_LIBRARY_PATH="$PWD/bin/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+          INPUT_CSV_PATH="$work/processed_data.csv" \
+          OUTPUT_REPORT_PATH="$work/report_output.txt" \
+            bin/reporter-linux-amd64 "$work/processed_data.csv" "$work/report_output.txt"
+          grep -q "GRAND TOTAL" "$work/report_output.txt"
+          grep -q "TOP 10" "$work/report_output.txt"
+          test -s "$work/report_output.txt"
+
+      - name: Commit and push Linux binaries
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f bin/processor-linux-amd64 bin/reporter-linux-amd64
+          if find bin/lib -type f -print -quit | grep -q .; then
+            git add -f bin/lib
+          fi
+          if git diff --cached --quiet; then
+            echo "Binary Linux tidak berubah; tidak ada commit baru."
+            exit 0
+          fi
+          git commit -m "build: refresh Linux POS engines"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

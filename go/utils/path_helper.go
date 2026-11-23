@@ -93,8 +93,8 @@ func BinaryName(base string) string {
 var ErrBinaryNotFound = errors.New("binary tidak ditemukan")
 
 // FindBinary mencari binary engine ("processor" atau "reporter").
-// Urutan: env override (envVar) -> bin/ -> folder sumber (c/ atau cobol/) ->
-// binary Linux statis bin/<base>-linux-amd64.
+// Urutan: env override (envVar); di Vercel, binary Linux amd64 lebih dulu;
+// lalu bin/ dan folder sumber (c/ atau cobol/). Di lokal, binary native lebih dulu.
 // Di Vercel, binary disalin ke /tmp dan diberi izin eksekusi.
 func FindBinary(base, envVar, sourceDir string) (string, error) {
 	root := ProjectRoot()
@@ -104,11 +104,16 @@ func FindBinary(base, envVar, sourceDir string) (string, error) {
 	if override := os.Getenv(envVar); override != "" {
 		candidates = append(candidates, override)
 	}
+	// Di Vercel utamakan binary Linux yang dibundel oleh GitHub Actions,
+	// bukan binary lokal/dinamis yang mungkin kebetulan ikut dalam build.
+	if IsVercel() && runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
+		candidates = append(candidates, filepath.Join(root, "bin", base+"-linux-amd64"))
+	}
 	candidates = append(candidates,
 		filepath.Join(root, "bin", name),
 		filepath.Join(root, sourceDir, name),
 	)
-	if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
+	if !IsVercel() && runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
 		candidates = append(candidates, filepath.Join(root, "bin", base+"-linux-amd64"))
 	}
 
@@ -127,17 +132,18 @@ func FindBinary(base, envVar, sourceDir string) (string, error) {
 // prepareOnVercel menyalin binary ke /tmp agar pasti punya izin eksekusi.
 func prepareOnVercel(source, base string) (string, error) {
 	target := filepath.Join("/tmp", "pos-"+base)
-
 	in, err := os.Open(source)
 	if err != nil {
 		return "", err
 	}
 	defer in.Close()
 
-	out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	out, err := os.CreateTemp("/tmp", "pos-"+base+"-")
 	if err != nil {
 		return "", err
 	}
+	tempPath := out.Name()
+	defer os.Remove(tempPath)
 	if _, err := io.Copy(out, in); err != nil {
 		out.Close()
 		return "", err
@@ -145,8 +151,20 @@ func prepareOnVercel(source, base string) (string, error) {
 	if err := out.Close(); err != nil {
 		return "", err
 	}
-	if err := os.Chmod(target, 0o755); err != nil {
+	if err := os.Chmod(tempPath, 0o755); err != nil {
 		return "", err
+	}
+	// Atomic replacement avoids running a partially copied binary when two
+	// serverless requests initialize the same engine concurrently.
+	if err := os.Rename(tempPath, target); err != nil {
+		return "", err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return "", err
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		return "", errors.New("binary serverless tidak memiliki izin eksekusi")
 	}
 	return target, nil
 }

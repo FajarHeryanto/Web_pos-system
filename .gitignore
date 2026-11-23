@@ -11,6 +11,9 @@
 *.dylib
 bin/*
 !bin/.gitkeep
+!bin/*-linux-amd64
+!bin/lib/
+!bin/lib/**
 data/*
 !data/.gitkeep
 .DS_Store

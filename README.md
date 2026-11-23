@@ -195,14 +195,11 @@ GnuCOBOL umumnya tidak terpasang di builder/runtime serverless. Opsi:
 
 **A. Bundel binary Linux statis**
 
-Pada mesin Linux x86_64 yang menyediakan toolchain, buat binary kompatibel serverless lalu masukkan ke `bin/`:
+Workflow `.github/workflows/build-linux-bin.yml` membangun kedua binary di GitHub Actions saat perubahan masuk ke `c/**` atau `cobol/**`, dan juga dapat dijalankan manual dari tab **Actions**. Workflow menguji executable, lalu meng-commit dan push `bin/processor-linux-amd64` serta `bin/reporter-linux-amd64` (beserta `bin/lib/` jika linking dinamis diperlukan). Pastikan pengaturan repository mengizinkan workflow menulis ke repository (`contents: write`).
 
-```bash
-make c-static
-make cobol-static
-```
+Untuk build manual pada Linux x86_64, gunakan `make c-static` dan `make cobol-static`. Hasil harus bernama `bin/processor-linux-amd64` dan `bin/reporter-linux-amd64`. `.gitignore` mengecualikan binary lokal/Windows tetapi mempertahankan artifact Linux. Jika GnuCOBOL tidak dapat di-link statis, workflow membundel library runtime non-glibc ke `bin/lib/`; API menetapkan `LD_LIBRARY_PATH` saat menjalankan reporter. `vercel.json` menyertakan `bin/**` ke fungsi Go. `FindBinary` memprioritaskan binary Linux amd64 di Vercel, menyalinnya ke `/tmp`, dan memberi izin eksekusi.
 
-Pastikan hasil bernama `bin/processor-linux-amd64` dan `bin/reporter-linux-amd64`, sesuai arsitektur runtime Vercel, lalu masukkan binary tersebut ke Git/deployment artifact (binary diabaikan `.gitignore` secara default). `vercel.json` menyertakan `bin/**` ke fungsi Go; handler menyalin executable ke `/tmp` dan menjalankannya. Build COBOL statis memerlukan pustaka statis GnuCOBOL dan dependensinya; uji binary di Linux sejenis sebelum deploy.
+Setelah workflow berhasil dan binary muncul sebagai commit, biarkan integrasi Git Vercel membuat deployment baru (atau lakukan redeploy manual). Untuk pertama kali, jalankan workflow manual setelah file workflow masuk ke repository.
 
 **B. Mode hybrid (disarankan bila `cobc`/pustaka statis tidak tersedia)**
 
