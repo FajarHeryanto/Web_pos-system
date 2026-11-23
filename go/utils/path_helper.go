@@ -23,13 +23,13 @@ func dirExists(path string) bool {
 	return err == nil && info.IsDir()
 }
 
-// ProjectRoot mencari folder akar proyek (yang memuat go.mod / web / bin).
+// ProjectRoot mencari folder akar proyek (yang memuat bin / web / go.mod).
 // Bisa dipaksa lewat environment variable POS_ROOT.
 func ProjectRoot() string {
 	if root := os.Getenv("POS_ROOT"); root != "" {
 		return root
 	}
-	candidates := []string{}
+	candidates := []string{"/var/task"}
 	if wd, err := os.Getwd(); err == nil {
 		candidates = append(candidates, wd, filepath.Dir(wd), filepath.Dir(filepath.Dir(wd)))
 	}
@@ -38,12 +38,12 @@ func ProjectRoot() string {
 		candidates = append(candidates, dir, filepath.Dir(dir))
 	}
 	for _, dir := range candidates {
-		if fileExists(filepath.Join(dir, "go.mod")) || dirExists(filepath.Join(dir, "web")) {
+		if dirExists(filepath.Join(dir, "bin")) || dirExists(filepath.Join(dir, "web")) || fileExists(filepath.Join(dir, "go.mod")) {
 			return dir
 		}
 	}
-	if len(candidates) > 0 {
-		return candidates[0]
+	if len(candidates) > 1 {
+		return candidates[1]
 	}
 	return "."
 }
@@ -107,7 +107,12 @@ func FindBinary(base, envVar, sourceDir string) (string, error) {
 	// Di Vercel utamakan binary Linux yang dibundel oleh GitHub Actions,
 	// bukan binary lokal/dinamis yang mungkin kebetulan ikut dalam build.
 	if IsVercel() && runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
-		candidates = append(candidates, filepath.Join(root, "bin", base+"-linux-amd64"))
+		candidates = append(candidates,
+			filepath.Join(root, "bin", base+"-linux-amd64"),
+			filepath.Join("/var/task", "bin", base+"-linux-amd64"),
+			filepath.Join("bin", base+"-linux-amd64"),
+			filepath.Join("..", "bin", base+"-linux-amd64"),
+		)
 	}
 	candidates = append(candidates,
 		filepath.Join(root, "bin", name),
