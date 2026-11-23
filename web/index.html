@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard | POS Toko</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="/css/style.css" rel="stylesheet">
+</head>
+<body data-page="dashboard">
+  <div class="app-layout">
+    <div id="sidebar-mount"></div>
+    <div class="main-area">
+      <div id="topbar-mount"></div>
+      <main class="page-content">
+        <div class="page-heading"><div><p class="eyebrow">RINGKASAN TOKO</p><h1>Dashboard</h1><p class="text-muted">Pantau performa penjualan dan aktivitas toko Anda.</p></div><span class="today-label" id="today-label"></span></div>
+        <div class="alert alert-warning d-none" id="dashboard-alert" role="alert"></div>
+        <section class="kpi-grid" aria-label="Ringkasan penjualan">
+          <article class="kpi-card kpi-highlight"><div class="kpi-top"><span>Total pendapatan</span><i class="bi bi-wallet2"></i></div><div class="kpi-value" id="kpi-revenue">—</div><div class="kpi-foot"><span><i class="bi bi-receipt me-1"></i><span id="kpi-transactions">—</span> transaksi tercatat</span></div></article>
+          <article class="kpi-card"><div class="kpi-top"><span>Total produk</span><span class="kpi-icon kpi-blue"><i class="bi bi-box-seam"></i></span></div><div class="kpi-value" id="kpi-products">—</div><div class="kpi-foot">Produk aktif di katalog</div></article>
+          <article class="kpi-card"><div class="kpi-top"><span>Stok menipis</span><span class="kpi-icon kpi-orange"><i class="bi bi-exclamation-triangle"></i></span></div><div class="kpi-value" id="kpi-low-stock">—</div><div class="kpi-foot">Stok 10 atau kurang</div></article>
+          <article class="kpi-card"><div class="kpi-top"><span>Rata-rata transaksi</span><span class="kpi-icon kpi-green"><i class="bi bi-graph-up"></i></span></div><div class="kpi-value" id="kpi-average">—</div><div class="kpi-foot">Dihitung dari transaksi tersimpan</div></article>
+        </section>
+        <section class="content-grid dashboard-grid">
+          <article class="panel chart-panel"><div class="panel-heading"><div><h2>Penjualan harian</h2><p>Pergerakan pendapatan dalam 7 hari terakhir</p></div><span class="panel-badge"><i class="bi bi-calendar3 me-1"></i>7 hari</span></div><div class="chart-wrap"><canvas id="sales-chart" aria-label="Grafik pendapatan penjualan harian"></canvas><div class="chart-empty d-none" id="chart-empty">Belum ada data penjualan pada periode ini.</div></div></article>
+          <article class="panel top-products-panel"><div class="panel-heading"><div><h2>Produk terlaris</h2><p>Berdasarkan jumlah terjual</p></div><a href="/transactions" class="text-link">Kasir <i class="bi bi-arrow-up-right"></i></a></div><div id="top-products" class="rank-list"><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div></div></article>
+        </section>
+        <section class="panel table-panel"><div class="panel-heading"><div><h2>Transaksi terbaru</h2><p>Aktivitas penjualan terkini</p></div><a class="btn btn-sm btn-outline-primary" href="/transactions">Lihat transaksi <i class="bi bi-arrow-right ms-1"></i></a></div><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Transaksi</th><th>Produk</th><th>Kasir</th><th>Tanggal</th><th>Pembayaran</th><th class="text-end">Total</th></tr></thead><tbody id="recent-transactions"><tr><td colspan="6" class="text-center text-muted py-4">Memuat transaksi…</td></tr></tbody></table></div></section>
+      </main>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/js/config.js"></script><script src="/js/api.js"></script><script src="/js/app.js"></script><script src="/js/dashboard.js"></script>
+</body></html>

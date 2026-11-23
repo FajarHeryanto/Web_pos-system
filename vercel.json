@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "buildCommand": "make vercel-build",
+  "outputDirectory": "web",
+  "functions": {
+    "api/index.go": {
+      "maxDuration": 60,
+      "includeFiles": "bin/**,web/**"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/health", "destination": "/api/index" },
+    { "source": "/css/(.*)", "destination": "/css/$1" },
+    { "source": "/js/(.*)", "destination": "/js/$1" },
+    { "source": "/login", "destination": "/login.html" },
+    { "source": "/products", "destination": "/products.html" },
+    { "source": "/transactions", "destination": "/transactions.html" },
+    { "source": "/reports", "destination": "/reports.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

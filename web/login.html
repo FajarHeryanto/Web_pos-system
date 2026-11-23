@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Masuk | POS Toko</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="/css/style.css" rel="stylesheet">
+</head>
+<body class="login-page">
+  <main class="login-shell">
+    <section class="login-visual">
+      <div class="login-brand"><span class="brand-mark"><i class="bi bi-bag-check-fill"></i></span><span>POS Toko</span></div>
+      <div class="login-art" aria-hidden="true">
+        <div class="art-window"><div class="art-top"><span></span><span></span><span></span><b>Transaksi baru</b></div><div class="art-content"><div class="art-product"><i class="bi bi-cup-hot"></i><span>Nasi Goreng</span><strong>Rp25.000</strong></div><div class="art-product"><i class="bi bi-cup-straw"></i><span>Teh Manis</span><strong>Rp8.000</strong></div><div class="art-total"><span>Total pembayaran</span><strong>Rp33.000</strong></div></div></div>
+        <div class="art-bubble bubble-one"><i class="bi bi-graph-up-arrow"></i></div><div class="art-bubble bubble-two"><i class="bi bi-check2"></i></div>
+      </div>
+      <div class="login-copy"><h1>Kelola toko dengan lebih mudah.</h1><p>Penjualan, produk, dan laporan dalam satu tempat.</p></div>
+      <div class="login-visual-foot"><span><i class="bi bi-shield-check me-2"></i>Masuk dengan akun toko Anda</span><span>Point of Sales</span></div>
+    </section>
+    <section class="login-form-side">
+      <form class="login-form" id="login-form" novalidate>
+        <div class="mobile-brand"><span class="brand-mark"><i class="bi bi-bag-check-fill"></i></span><strong>POS Toko</strong></div>
+        <p class="eyebrow">SELAMAT DATANG</p><h2>Masuk ke akun</h2><p class="text-muted mb-4">Masukkan nama pengguna dan kata sandi Anda.</p>
+        <div id="login-error" class="alert alert-danger d-none" role="alert"></div>
+        <label class="form-label" for="username">Nama pengguna</label><div class="input-icon mb-3"><i class="bi bi-person"></i><input id="username" class="form-control" autocomplete="username" required placeholder="Contoh: admin"></div>
+        <label class="form-label" for="password">Kata sandi</label><div class="input-icon mb-2"><i class="bi bi-lock"></i><input id="password" class="form-control" type="password" autocomplete="current-password" required placeholder="Masukkan kata sandi"></div>
+        <button class="btn btn-primary w-100 login-submit mt-3" type="submit"><span class="submit-label">Masuk</span><span class="spinner-border spinner-border-sm d-none" aria-hidden="true"></span><i class="bi bi-arrow-right ms-auto"></i></button>
+        <div class="demo-note"><div class="demo-icon"><i class="bi bi-info-circle"></i></div><div><strong>Akun demo administrator</strong><p>Nama pengguna <code>admin</code><br>Kata sandi <code>admin123</code></p></div></div>
+        <p class="login-footer">© 2026 POS Toko · Sistem informasi penjualan</p>
+      </form>
+    </section>
+  </main>
+  <script src="/js/config.js"></script><script src="/js/api.js"></script><script src="/js/login.js"></script>
+</body>
+</html>
